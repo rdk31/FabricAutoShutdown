@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "autoshutdown",
+  "version": "${version}",
+  "name": "AutoShutdown",
+  "description": "Automatically shuts down the server when empty",
+  "authors": ["rdk31"],
+  "contact": {
+    "sources": "https://github.com/rdk31/fabric-auto-shutdown"
+  },
+  "license": "MIT",
+  "icon": "assets/autoshutdown/icon.png",
+  "environment": "server",
+  "entrypoints": {
+    "server": [
+      "net.rdk31.autoshutdown.AutoShutdown"
+    ]
+  },
+  "mixins": [
+    "autoshutdown.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.12.12",
+    "fabric": "*",
+    "minecraft": "1.18.x",
+    "java": ">=17"
+  }
+}

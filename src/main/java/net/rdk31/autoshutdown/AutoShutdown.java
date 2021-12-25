@@ -1,6 +1,7 @@
 package net.rdk31.autoshutdown;
 
 import net.fabricmc.api.DedicatedServerModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -11,6 +12,7 @@ import org.apache.logging.log4j.Logger;
 
 public class AutoShutdown implements DedicatedServerModInitializer {
     public static final Logger LOGGER = LogManager.getLogger("AutoShutdown");
+    public static ConfigInstance CONFIG;
 
     private long shutdownTime = 0;
 
@@ -18,31 +20,44 @@ public class AutoShutdown implements DedicatedServerModInitializer {
     public void onInitializeServer() {
         LOGGER.info("AutoShutdown initialized");
 
-        ServerTickEvents.END_SERVER_TICK.register(this::checkPlayerCount);
-        ServerPlayConnectionEvents.JOIN.register(this::playerJoined);
+        ServerTickEvents.END_SERVER_TICK.register(this::onTickEnd);
+        ServerPlayConnectionEvents.JOIN.register(this::onPlayerJoined);
+        ServerPlayConnectionEvents.DISCONNECT.register(this::onPlayerDisconnected);
+
+        ServerLifecycleEvents.SERVER_STARTING.register(this::onServerStarting);
     }
 
-    private void playerJoined(ServerPlayNetworkHandler serverPlayNetworkHandler, PacketSender packetSender, MinecraftServer minecraftServer) {
+    private void onServerStarting(MinecraftServer minecraftServer) {
+        CONFIG = ConfigManager.loadConfig();
+    }
+
+    private void onTickEnd(MinecraftServer minecraftServer) {
+        if (minecraftServer.getTicks() % (20 * CONFIG.checkPeriod) == 0) {
+            checkPlayerCount(minecraftServer);
+        }
+
+        if (shutdownTime != 0 && shutdownTime < System.currentTimeMillis()) {
+            shutdownTime = 0;
+            LOGGER.info("Shutting down");
+            minecraftServer.stop(false);
+        }
+    }
+
+    private void onPlayerDisconnected(ServerPlayNetworkHandler serverPlayNetworkHandler, MinecraftServer minecraftServer) {
+        checkPlayerCount(minecraftServer);
+    }
+
+    private void onPlayerJoined(ServerPlayNetworkHandler serverPlayNetworkHandler, PacketSender packetSender, MinecraftServer minecraftServer) {
         if (shutdownTime != 0) {
-            LOGGER.info("canceling shutdown");
+            LOGGER.info("Somebody joined the server, canceling the shutdown");
             shutdownTime = 0;
         }
     }
 
-    private void checkPlayerCount(MinecraftServer server) {
-        long currentTime = System.currentTimeMillis();
-
-        if (server.getTicks() % (20 * 5) == 0) {
-            LOGGER.info("current count: " + server.getCurrentPlayerCount());
-            if (server.getCurrentPlayerCount() == 0 && shutdownTime == 0 && !server.isStopping()) {
-                LOGGER.info("scheduling shutdown in 15s");
-                shutdownTime = currentTime + 15 * 1000;
-            }
-        }
-
-        if (shutdownTime != 0 && shutdownTime < currentTime) {
-            shutdownTime = 0;
-            server.stop(false);
+    private void checkPlayerCount(MinecraftServer minecraftServer) {
+        if (minecraftServer.getCurrentPlayerCount() == 0 && shutdownTime == 0 && !minecraftServer.isStopping()) {
+            LOGGER.info("Scheduling shutdown in " + CONFIG.shutdownDelay + " seconds");
+            shutdownTime = System.currentTimeMillis() + CONFIG.shutdownDelay * 1000;
         }
     }
 }
